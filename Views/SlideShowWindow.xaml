@@ -1,0 +1,532 @@
+<Window x:Class="SlideCraft.Views.SlideShowWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:SlideCraft.Models"
+        xmlns:conv="clr-namespace:SlideCraft.Resources"
+        Title="SlideCraft - Slide Show"
+        Background="Black"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowState="Maximized"
+        ShowInTaskbar="False"
+        Loaded="Window_Loaded"
+        Closed="Window_Closed"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <!-- ================================================================
+         DIAPORAMA PLEIN ÉCRAN
+
+         Différence essentielle avec la zone de travail de MainWindow :
+         ici les modèles (DataTemplate) sont en LECTURE SEULE.
+         Pas de cadre bleu, pas de poignée de redimensionnement, pas de
+         zone de saisie : le public ne doit voir que la diapositive, et
+         on ne peut pas modifier le document pendant la projection.
+         ================================================================ -->
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!-- Un bloc de texte, simplement dessiné -->
+        <DataTemplate DataType="{x:Type models:TextElement}">
+            <Border Width="{Binding Width}" Height="{Binding Height}">
+                <TextBlock Text="{Binding Text}"
+                           FontSize="{Binding FontSize}"
+                           FontFamily="{Binding FontFamily}"
+                           FontWeight="{Binding FontWeight}"
+                           Foreground="{Binding Foreground}"
+                           TextWrapping="Wrap" />
+            </Border>
+        </DataTemplate>
+
+        <!-- Une image -->
+        <DataTemplate DataType="{x:Type models:ImageElement}">
+            <Image Source="{Binding ImagePath}"
+                   Width="{Binding Width}"
+                   Height="{Binding Height}"
+                   Stretch="Uniform" />
+        </DataTemplate>
+
+        <!-- Une vidéo : elle joue avec le son pendant la projection.
+             LoadedBehavior reste Manual : c'est le code-behind qui lance et
+             relance la lecture, pour pouvoir la couper en quittant la diapositive. -->
+        <DataTemplate DataType="{x:Type models:VideoElement}">
+            <MediaElement Source="{Binding VideoPath}"
+                          Width="{Binding Width}"
+                          Height="{Binding Height}"
+                          LoadedBehavior="Manual"
+                          Volume="1"
+                          Stretch="Uniform"
+                          Loaded="VideoPlayer_Loaded"
+                          Unloaded="VideoPlayer_Unloaded"
+                          MediaEnded="VideoPlayer_MediaEnded" />
+        </DataTemplate>
+
+        <!-- Une forme -->
+        <DataTemplate DataType="{x:Type models:ShapeElement}">
+            <Rectangle Width="{Binding Width}"
+                       Height="{Binding Height}"
+                       Fill="{Binding Fill}"
+                       Stroke="{Binding Stroke}"
+                       StrokeThickness="1"
+                       RadiusX="{Binding CornerRadius}"
+                       RadiusY="{Binding CornerRadius}" />
+        </DataTemplate>
+
+        <!-- Un tableau (cellules non éditables) -->
+        <DataTemplate DataType="{x:Type models:TableElement}">
+            <Border Width="{Binding Width}" Height="{Binding Height}"
+                    Background="{Binding Fill}"
+                    BorderBrush="{Binding Stroke}"
+                    BorderThickness="1">
+                <ItemsControl ItemsSource="{Binding Cells}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding Columns}" Rows="{Binding Rows}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#D1D5DB" BorderThickness="0,0,1,1" Padding="6">
+                                <TextBlock Text="{Binding Text}"
+                                           FontSize="{Binding DataContext.FontSize,
+                                               RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                           Foreground="#1F2937"
+                                           TextWrapping="Wrap" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </DataTemplate>
+
+        <!-- La surface projetée : fond + éléments positionnés.
+             Le Viewbox qui l'utilise met tout à l'échelle de l'écran. -->
+        <DataTemplate x:Key="ProjectedSlideTemplate">
+            <Grid Width="960" Height="540"
+                  Background="{Binding BackgroundColor}"
+                  ClipToBounds="True">
+                <ItemsControl ItemsSource="{Binding Elements}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{Binding X}" />
+                            <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
+                </ItemsControl>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Bouton sombre de la barre des notes -->
+        <Style x:Key="ShowButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#374151" />
+            <Setter Property="Foreground" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#4B5563" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================================================
+             1. LA DIAPOSITIVE, SEULE À L'ÉCRAN
+             ============================================================ -->
+        <Grid Grid.Row="0" Background="Black">
+            <!-- x:Name : c'est CE conteneur que la fenêtre anime quand la
+                 diapositive change (transition Fade, Push ou Wipe choisie
+                 dans l'onglet Transitions). Le contenu, lui, vient du ViewModel. -->
+            <Viewbox x:Name="SlideHost" Stretch="Uniform" Margin="12">
+                <Viewbox.RenderTransform>
+                    <TranslateTransform x:Name="SlideTranslate" />
+                </Viewbox.RenderTransform>
+                <ContentPresenter Content="{Binding CurrentSlide}"
+                                  ContentTemplate="{StaticResource ProjectedSlideTemplate}" />
+            </Viewbox>
+
+            <!-- Rappel discret des touches, en haut à droite -->
+            <Border HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,14,18,0"
+                    Padding="12,6"
+                    CornerRadius="5"
+                    Background="#99000000">
+                <StackPanel>
+                    <TextBlock Text="{Binding ProgressLabel}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#F9FAFB"
+                               HorizontalAlignment="Right" />
+                    <TextBlock Text="← →: navigate · N: notes · V: voice · T: subtitles · 1-4: answer · L: ranking · Esc: exit"
+                               FontSize="11"
+                               Foreground="#D1D5DB" />
+                    <!-- Message d'aide placé ici (et non dans les notes) :
+                         il reste lisible même quand les notes sont masquées. -->
+                    <TextBlock Text="{Binding StatusMessage}"
+                               FontSize="11"
+                               Foreground="#FCA5A5"
+                               TextWrapping="Wrap"
+                               MaxWidth="300"
+                               HorizontalAlignment="Right"
+                               TextAlignment="Right"
+                               Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- ====================================================
+                 QUIZ DU MODE JEU
+                 Affiché seulement quand la diapositive a une question.
+                 Le présentateur clique la réponse donnée à main levée
+                 (ou tape 1 à 4), puis clique le joueur qui a répondu.
+                 ==================================================== -->
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,18">
+            <Border Width="900"
+                    Padding="22,16"
+                    CornerRadius="10"
+                    Background="#F21F2937"
+                    BorderBrush="#4B5563"
+                    BorderThickness="1"
+                    Visibility="{Binding HasQuestion, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding Game.QuestionHeader}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#A5B4FC" />
+                    <TextBlock Text="{Binding Game.QuestionText}"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Foreground="#F9FAFB"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,12" />
+
+                    <ItemsControl ItemsSource="{Binding Game.Answers}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Margin="0,0,8,8"
+                                        Padding="14,10"
+                                        HorizontalContentAlignment="Left"
+                                        FontSize="16"
+                                        FontWeight="Normal"
+                                        Foreground="#F9FAFB"
+                                        BorderThickness="1"
+                                        Cursor="Hand"
+                                        Focusable="False"
+                                        Command="{Binding DataContext.AnswerCommand,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding Index}"
+                                        IsEnabled="{Binding DataContext.Game.CanAnswer,
+                                                    RelativeSource={RelativeSource AncestorType=Window}}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#374151" />
+                                            <Setter Property="BorderBrush" Value="#4B5563" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRight}" Value="True">
+                                                    <Setter Property="Background" Value="#15803D" />
+                                                    <Setter Property="BorderBrush" Value="#22C55E" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsWrong}" Value="True">
+                                                    <Setter Property="Background" Value="#B91C1C" />
+                                                    <Setter Property="BorderBrush" Value="#EF4444" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Letter}"
+                                                   FontWeight="Bold"
+                                                   Margin="0,0,10,0" />
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Visibility="{Binding Game.IsAnswered, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding Game.Feedback}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="#FDE68A"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,8" />
+
+                        <!-- Qui a répondu ? Les points vont au joueur cliqué. -->
+                        <StackPanel Visibility="{Binding Game.CanAward, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Who answered? Click the player who gets the points:"
+                                       FontSize="12"
+                                       Foreground="#D1D5DB"
+                                       Margin="0,0,0,6" />
+                            <ItemsControl ItemsSource="{Binding Game.Players}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ShowButtonStyle}"
+                                                Content="{Binding Name}"
+                                                Command="{Binding DataContext.AwardCommand,
+                                                          RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Margin="0,8,0,0">
+                        <TextBlock Text="{Binding Game.ScoreSummary}"
+                                   FontSize="11.5"
+                                   Foreground="#9CA3AF"
+                                   VerticalAlignment="Center" />
+                        <Button HorizontalAlignment="Right"
+                                Style="{StaticResource ShowButtonStyle}"
+                                Margin="0"
+                                Content="Ranking (L)"
+                                Command="{Binding ToggleLeaderboardCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ====================================================
+                 SOUS-TITRES BILINGUES (touche T)
+                 Les deux lignes sont écrites à la main dans l'éditeur
+                 (bouton « Subtitles »). La touche T choisit ce qui
+                 s'affiche : les deux langues, une seule, ou rien.
+                 ==================================================== -->
+            <Border Width="900"
+                    Margin="0,10,0,0"
+                    Padding="22,12"
+                    CornerRadius="10"
+                    Background="#D9000000"
+                    BorderBrush="#374151"
+                    BorderThickness="1"
+                    Visibility="{Binding IsSubtitleVisible,
+                                 Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <StackPanel Visibility="{Binding IsSubtitlePrimaryVisible,
+                                            Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding SubtitlePrimaryLanguage}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="#A5B4FC" />
+                        <TextBlock Text="{Binding SubtitlePrimaryText}"
+                                   FontSize="20"
+                                   Foreground="#F9FAFB"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Margin="0,6,0,0"
+                                Visibility="{Binding IsSubtitleSecondaryVisible,
+                                             Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding SubtitleSecondaryLanguage}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="#86EFAC" />
+                        <TextBlock Text="{Binding SubtitleSecondaryText}"
+                                   FontSize="17"
+                                   FontStyle="Italic"
+                                   Foreground="#E5E7EB"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            </StackPanel>
+
+            <!-- ====================================================
+                 CLASSEMENT (touche L)
+                 ==================================================== -->
+            <Border Width="320"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Margin="0,0,24,0"
+                    Padding="16,12"
+                    CornerRadius="10"
+                    Background="#F2111827"
+                    BorderBrush="#4B5563"
+                    BorderThickness="1"
+                    Visibility="{Binding Game.IsLeaderboardVisible, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="LEADERBOARD"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="#A5B4FC" />
+                    <ItemsControl ItemsSource="{Binding Game.Leaderboard}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="14"
+                                               Foreground="#F9FAFB"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ScoreLabel}"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#FDE68A"
+                                               Margin="10,0,0,0" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="No players yet. Close the show and use Game Setup in the editor."
+                               FontSize="12"
+                               Foreground="#9CA3AF"
+                               TextWrapping="Wrap"
+                               Margin="0,6,0,0"
+                               Visibility="{Binding Game.HasPlayers,
+                                            Converter={StaticResource InverseBoolToVisibility}}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ============================================================
+             2. LES NOTES DU PRÉSENTATEUR (privées)
+             Visibles au lancement, masquables avec la touche N.
+             ============================================================ -->
+        <Border Grid.Row="1"
+                Background="#111827"
+                BorderBrush="#374151"
+                BorderThickness="0,1,0,0"
+                Visibility="{Binding IsNotesVisible, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Margin="24,12,24,16">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="SPEAKER NOTES"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#9CA3AF"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="(private: hidden from the audience)"
+                                   FontSize="10.5"
+                                   Foreground="#6B7280"
+                                   Margin="10,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource ShowButtonStyle}"
+                                Content="◀ Previous"
+                                Command="{Binding PreviousCommand}" />
+                        <Button Style="{StaticResource ShowButtonStyle}"
+                                Content="Next ▶"
+                                Command="{Binding NextCommand}" />
+                        <Button Style="{StaticResource ShowButtonStyle}"
+                                Content="Hide (N)"
+                                Command="{Binding ToggleNotesCommand}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ====================================================
+                     NARRATION : la voix qui lit la diapositive
+                     Le texte affiché est exactement ce que le public
+                     entend, pour éviter les mauvaises surprises.
+                     ==================================================== -->
+                <Border Background="#0B1220"
+                        BorderBrush="#374151"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12,8"
+                        Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="VOICE NARRATION"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#A5B4FC" />
+                            <TextBlock Text="{Binding NarrationLabel}"
+                                       FontSize="10.5"
+                                       Foreground="#6B7280"
+                                       Margin="0,2,0,0" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding NarrationStatus}"
+                                   FontSize="11.5"
+                                   Foreground="#9CA3AF"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   Margin="16,0,16,0" />
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource ShowButtonStyle}"
+                                    Content="Voice on / off (V)"
+                                    Command="{Binding ToggleNarrationCommand}"
+                                    IsEnabled="{Binding IsNarrationAvailable}" />
+                            <Button Style="{StaticResource ShowButtonStyle}"
+                                    Content="Read again"
+                                    Command="{Binding ReplayNarrationCommand}"
+                                    IsEnabled="{Binding IsNarrationAvailable}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="{Binding NarrationText}"
+                           FontSize="12.5"
+                           FontStyle="Italic"
+                           Foreground="#CBD5E1"
+                           TextWrapping="Wrap"
+                           MaxHeight="52"
+                           Margin="2,6,0,0" />
+
+                <!-- Rappel des sous-titres de cette diapositive -->
+                <StackPanel Orientation="Horizontal" Margin="2,6,0,0">
+                    <TextBlock Text="{Binding SubtitleModeLabel}"
+                               FontSize="11"
+                               Foreground="#9CA3AF" />
+                    <TextBlock Text="{Binding SubtitleStatus}"
+                               FontSize="11"
+                               Foreground="#FCA5A5"
+                               TextWrapping="Wrap"
+                               Margin="14,0,0,0" />
+                </StackPanel>
+
+                <ScrollViewer MaxHeight="150"
+                              VerticalScrollBarVisibility="Auto"
+                              Margin="0,8,0,0">
+                    <TextBlock Text="{Binding NotesText}"
+                               FontSize="14"
+                               Foreground="#E5E7EB"
+                               TextWrapping="Wrap" />
+                </ScrollViewer>
+
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

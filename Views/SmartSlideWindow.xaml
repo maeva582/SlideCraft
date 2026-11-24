@@ -1,0 +1,275 @@
+<Window x:Class="SlideCraft.Views.SmartSlideWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:SlideCraft.Resources"
+        Title="SlideCraft - SmartSlide"
+        Width="920" Height="620"
+        MinWidth="760" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#F3F4F6"
+        FontFamily="Segoe UI"
+        ShowInTaskbar="False">
+
+    <!-- ================================================================
+         SMARTSLIDE : RAPPORT D'ANALYSE
+
+         Cette fenêtre ne fait qu'AFFICHER un rapport déjà calculé par
+         SmartSlideAnalyzer. Aucune analyse n'est lancée ici : la note est
+         figée à l'ouverture, et on la recalcule en recliquant sur
+         « SmartSlide » dans le ruban.
+         ================================================================ -->
+    <Window.Resources>
+        <res:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!-- Pastille de note : verte, orange ou rouge selon l'appréciation -->
+        <Style x:Key="ScoreBadgeStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="MinWidth" Value="46" />
+            <Setter Property="Background" Value="#D1FAE5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Grade}" Value="Good">
+                    <Setter Property="Background" Value="#DBEAFE" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Grade}" Value="Needs work">
+                    <Setter Property="Background" Value="#FEF3C7" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Grade}" Value="Needs rework">
+                    <Setter Property="Background" Value="#FEE2E2" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Un point relevé : barre de couleur à gauche + texte -->
+        <Style x:Key="IssueCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#E5E7EB" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+
+        <Style x:Key="IssueAccentStyle" TargetType="Border">
+            <Setter Property="Width" Value="4" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Background" Value="#9CA3AF" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                    <Setter Property="Background" Value="#DC2626" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                    <Setter Property="Background" Value="#F59E0B" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="IssueLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#6B7280" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ============ 1. EN-TÊTE ============ -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="SmartSlide — presentation review"
+                       FontSize="19" FontWeight="SemiBold" Foreground="#111827" />
+            <TextBlock Text="Advice computed on your computer, no Internet needed. Run the review again after your changes."
+                       FontSize="12" Foreground="#6B7280" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <!-- ============ 2. LISTE À GAUCHE / DÉTAIL À DROITE ============ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="306" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Liste des diapositives notées -->
+            <Border Grid.Column="0"
+                    Background="White"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="8">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="SLIDES"
+                               FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="#6B7280"
+                               Margin="6,4,6,8" />
+
+                    <ListBox ItemsSource="{Binding Analyses}"
+                             SelectedItem="{Binding SelectedAnalysis, Mode=TwoWay}"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="8,7" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Margin" Value="0,0,0,2" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding SlideTitle}"
+                                                   FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="#111827"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Margin="0,1,0,0">
+                                            <Run Text="Slide" />
+                                            <Run Text=" " />
+                                            <Run Text="{Binding SlideNumber, Mode=OneWay}" />
+                                            <Run Text=" · " />
+                                            <Run Text="{Binding Grade}" />
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="1" Style="{StaticResource ScoreBadgeStyle}">
+                                        <TextBlock Text="{Binding Score}"
+                                                   FontSize="12" FontWeight="Bold"
+                                                   Foreground="#111827"
+                                                   HorizontalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Détail de la diapositive choisie -->
+            <Border Grid.Column="2"
+                    Background="White"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16"
+                    DataContext="{Binding SelectedAnalysis}">
+                <DockPanel>
+                    <!-- Bandeau : titre, note, appréciation -->
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SlideTitle}"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Summary}"
+                                       FontSize="12" Foreground="#6B7280" Margin="0,3,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <TextBlock Text="{Binding ScoreLabel}"
+                                       FontSize="26" FontWeight="Bold"
+                                       Foreground="#111827"
+                                       VerticalAlignment="Center" />
+                            <Border Style="{StaticResource ScoreBadgeStyle}" Margin="10,0,0,0">
+                                <TextBlock Text="{Binding Grade}"
+                                           FontSize="11.5" FontWeight="SemiBold"
+                                           Foreground="#111827"
+                                           HorizontalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Message quand tout va bien -->
+                    <Border DockPanel.Dock="Top"
+                            Background="#ECFDF5"
+                            BorderBrush="#A7F3D0"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12,10"
+                            Margin="0,0,0,8"
+                            Visibility="{Binding HasProblems, Converter={StaticResource InverseBoolToVisibility}}">
+                        <TextBlock Text="No issue found. This slide can be projected as it is."
+                                   FontSize="12.5" Foreground="#065F46" TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- Liste des points relevés -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Issues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource IssueCardStyle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Grid.Column="0" Style="{StaticResource IssueAccentStyle}" />
+
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding SeverityLabel}"
+                                                           Style="{StaticResource IssueLabelStyle}" />
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="#111827"
+                                                           Margin="0,2,0,0" />
+                                                <TextBlock Text="{Binding Advice}"
+                                                           FontSize="12"
+                                                           Foreground="#374151"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ============ 3. PIED : MOYENNE + FERMER ============ -->
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="{Binding OverviewText}"
+                       FontSize="12"
+                       Foreground="#374151"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Margin="2,0,16,0" />
+
+            <!-- IsCancel : la touche Échap ferme aussi la fenêtre. -->
+            <Button Grid.Column="1"
+                    Content="Close"
+                    IsCancel="True"
+                    Padding="18,7"
+                    FontSize="12.5"
+                    Background="#4F46E5"
+                    Foreground="White"
+                    BorderThickness="0"
+                    Cursor="Hand" />
+        </Grid>
+    </Grid>
+</Window>

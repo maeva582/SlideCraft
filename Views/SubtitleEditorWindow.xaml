@@ -1,0 +1,162 @@
+<Window x:Class="SlideCraft.Views.SubtitleEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SlideCraft - Subtitles"
+        Width="640"
+        Height="560"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#F8FAFC"
+        FontFamily="Segoe UI"
+        FontSize="13">
+
+    <!-- ================================================================
+         SOUS-TITRES BILINGUES D'UNE DIAPOSITIVE
+
+         Le présentateur écrit lui-même les deux langues : SlideCraft ne
+         traduit rien et n'utilise pas Internet. Les deux lignes sont
+         affichées en bas de l'écran pendant la projection ; la touche T
+         permet de montrer l'une, l'autre, les deux, ou rien.
+         ================================================================ -->
+    <Window.Resources>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#374151" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <Style x:Key="DialogButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="16,7" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Background" Value="#E5E7EB" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="BorderBrush" Value="#CBD5E1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <StackPanel>
+            <TextBlock Text="BILINGUAL SUBTITLES"
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="#6366F1" />
+            <TextBlock Text="{Binding SlideTitle, StringFormat=Slide: {0}}"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#111827"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,2,0,0" />
+            <TextBlock Text="Write both languages yourself. During the slide show the two lines appear at the bottom of the screen; press T to show both, one language, or none."
+                       FontSize="11.5"
+                       Foreground="#6B7280"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,14,0,0">
+            <StackPanel>
+                <!-- Langue principale -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="First language"
+                               Style="{StaticResource FieldLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+                    <TextBox Grid.Column="1"
+                             Width="180"
+                             HorizontalAlignment="Left"
+                             Padding="8,5"
+                             Text="{Binding PrimaryLanguage, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Name shown in front of this line (English, French, Spanish...)" />
+                </Grid>
+                <TextBox Margin="0,6,0,0"
+                         Padding="8,7"
+                         FontSize="14"
+                         BorderBrush="#CBD5E1"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         MinHeight="90"
+                         VerticalScrollBarVisibility="Auto"
+                         Text="{Binding PrimaryText, UpdateSourceTrigger=PropertyChanged}" />
+
+                <!-- Seconde langue -->
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Second language"
+                               Style="{StaticResource FieldLabelStyle}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+                    <TextBox Grid.Column="1"
+                             Width="180"
+                             HorizontalAlignment="Left"
+                             Padding="8,5"
+                             Text="{Binding SecondaryLanguage, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Name shown in front of this line" />
+                </Grid>
+                <TextBox Margin="0,6,0,0"
+                         Padding="8,7"
+                         FontSize="14"
+                         BorderBrush="#CBD5E1"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         MinHeight="90"
+                         VerticalScrollBarVisibility="Auto"
+                         Text="{Binding SecondaryText, UpdateSourceTrigger=PropertyChanged}" />
+
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="#B91C1C"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Margin="0,10,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Boutons -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    Style="{StaticResource DialogButtonStyle}"
+                    Margin="0"
+                    Content="Remove subtitles"
+                    IsEnabled="{Binding HasExistingSubtitles}"
+                    Click="Remove_Click"
+                    ToolTip="Remove the subtitles from this slide" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Style="{StaticResource DialogButtonStyle}"
+                        Content="Clear"
+                        Click="Clear_Click" />
+                <Button Style="{StaticResource DialogButtonStyle}"
+                        Content="Cancel"
+                        IsCancel="True" />
+                <Button Style="{StaticResource DialogButtonStyle}"
+                        Content="Save subtitles"
+                        IsDefault="True"
+                        Background="#4F46E5"
+                        Foreground="White"
+                        BorderBrush="#4338CA"
+                        Click="Save_Click" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

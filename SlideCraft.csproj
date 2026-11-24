@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>SlideCraft</RootNamespace>
+    <AssemblyName>SlideCraft</AssemblyName>
+  </PropertyGroup>
+
+  <!-- SDK Open XML : c'est la bibliothèque officielle de Microsoft pour
+       lire et écrire les fichiers .pptx (PowerPoint), .docx, .xlsx. -->
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+
+    <!-- Synthèse vocale hors ligne : System.Speech utilise les voix déjà
+         installées dans Windows. Aucun accès Internet n'est nécessaire. -->
+    <PackageReference Include="System.Speech" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

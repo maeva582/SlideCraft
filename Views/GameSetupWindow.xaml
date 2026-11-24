@@ -1,0 +1,73 @@
+<Window x:Class="SlideCraft.Views.GameSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SlideCraft - Game Setup"
+        Width="440"
+        Height="380"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#F8FAFC"
+        FontFamily="Segoe UI"
+        FontSize="13">
+
+    <!-- ================================================================
+         SAISIE DES JOUEURS DU MODE JEU
+
+         Tout se passe sur ce PC : les noms ne quittent jamais la machine,
+         et personne ne vote depuis un téléphone. Le présentateur clique
+         la réponse donnée à main levée.
+         ================================================================ -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="PLAYERS OF THE QUIZ GAME"
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="#6366F1" />
+            <TextBlock Text="One player per line. Each slide with a quiz shows its question at the end: the room votes by a show of hands, you click the answer, then click the player who answered."
+                       FontSize="11.5"
+                       Foreground="#6B7280"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0" />
+        </StackPanel>
+
+        <TextBox x:Name="PlayersBox"
+                 Grid.Row="1"
+                 Margin="0,14,0,0"
+                 Padding="10,8"
+                 FontSize="14"
+                 BorderBrush="#CBD5E1"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 VerticalScrollBarVisibility="Auto"
+                 VerticalContentAlignment="Top" />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <TextBlock Text="Leave empty to score the whole room."
+                       FontSize="11"
+                       Foreground="#6B7280"
+                       VerticalAlignment="Center"
+                       Margin="0,0,16,0" />
+            <Button Content="Cancel"
+                    IsCancel="True"
+                    Padding="16,7"
+                    Background="#E5E7EB"
+                    BorderBrush="#CBD5E1"
+                    Cursor="Hand" />
+            <Button Content="Start game"
+                    IsDefault="True"
+                    Padding="16,7"
+                    Margin="8,0,0,0"
+                    Background="#4F46E5"
+                    Foreground="White"
+                    BorderBrush="#4338CA"
+                    Cursor="Hand"
+                    Click="Ok_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

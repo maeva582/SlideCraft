@@ -1,0 +1,1284 @@
+<Window x:Class="SlideCraft.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:models="clr-namespace:SlideCraft.Models"
+        xmlns:res="clr-namespace:SlideCraft.Resources"
+        Title="SlideCraft"
+        Width="1400" Height="860"
+        MinWidth="1050" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Closing="Window_Closing"
+        Background="{StaticResource AppBackgroundBrush}">
+
+    <!-- Raccourcis clavier : Suppr = supprimer l'élément, Ctrl+Z / Ctrl+Y = annuler / rétablir.
+         Ils restent sans effet quand on tape dans une zone de texte, car celle-ci
+         traite d'abord le clavier pour elle-même. -->
+    <Window.InputBindings>
+        <KeyBinding Key="Delete" Command="{Binding DeleteElementCommand}" />
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
+        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewPresentationCommand}" />
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPresentationCommand}" />
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SavePresentationCommand}" />
+        <!-- F5 lance le diaporama, comme dans PowerPoint. -->
+        <KeyBinding Key="F5" Command="{Binding StartSlideShowCommand}" />
+    </Window.InputBindings>
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <!-- ================================================================
+         RESSOURCES DE LA FENÊTRE
+         Les modèles (DataTemplate) disent à WPF comment dessiner un texte,
+         une forme, un tableau... et une diapositive complète.
+         Le même modèle sert pour la miniature et pour la zone de travail.
+         ================================================================ -->
+    <Window.Resources>
+        <res:IndexPlusOneConverter x:Key="IndexPlusOneConverter" />
+        <res:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <res:PanelWidthConverter x:Key="PanelWidthConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- Cadre commun à tous les éléments : clic = sélection, cadre bleu si sélectionné -->
+        <Style x:Key="ElementFrameStyle" TargetType="Border">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeAll" />
+            <EventSetter Event="MouseLeftButtonDown" Handler="Element_MouseLeftButtonDown" />
+            <EventSetter Event="MouseMove" Handler="Element_MouseMove" />
+            <EventSetter Event="MouseLeftButtonUp" Handler="Element_MouseLeftButtonUp" />
+            <!-- Si la capture est perdue (Alt+Tab...), le déplacement doit
+                 tout de même être enregistré pour rester annulable. -->
+            <EventSetter Event="LostMouseCapture" Handler="Element_LostMouseCapture" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                    <Setter Property="BorderThickness" Value="1.5" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Un bloc de texte.
+             Double-clic : le TextBlock laisse la place à un TextBox (IsEditing),
+             ce qui permet de modifier le texte directement sur la diapositive.
+             Les deux contrôles sont superposés dans le même Grid : un seul est
+             visible à la fois, et les deux affichent exactement le même texte. -->
+        <DataTemplate DataType="{x:Type models:TextElement}">
+            <Border Style="{StaticResource ElementFrameStyle}"
+                    Width="{Binding Width}" Height="{Binding Height}">
+                <Grid>
+                    <TextBlock Text="{Binding Text}"
+                               FontSize="{Binding FontSize}"
+                               FontFamily="{Binding FontFamily}"
+                               FontWeight="{Binding FontWeight}"
+                               Foreground="{Binding Foreground}"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="{Binding FontSize}"
+                             FontFamily="{Binding FontFamily}"
+                             FontWeight="{Binding FontWeight}"
+                             Foreground="{Binding Foreground}"
+                             Background="Transparent"
+                             BorderBrush="{StaticResource AccentBrush}"
+                             BorderThickness="1"
+                             Padding="0"
+                             Margin="-1"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalContentAlignment="Top"
+                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+                             IsVisibleChanged="EditableTextBox_IsVisibleChanged"
+                             LostFocus="EditableTextBox_LostFocus"
+                             PreviewKeyDown="EditableTextBox_PreviewKeyDown" />
+
+                    <Thumb Style="{StaticResource ResizeGripStyle}"
+                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                           DragStarted="ResizeGrip_DragStarted"
+                           DragDelta="ResizeGrip_DragDelta"
+                           DragCompleted="ResizeGrip_DragCompleted" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Une image -->
+        <DataTemplate DataType="{x:Type models:ImageElement}">
+            <Border Style="{StaticResource ElementFrameStyle}"
+                    Width="{Binding Width}" Height="{Binding Height}">
+                <Grid>
+                    <Image Source="{Binding ImagePath}" Stretch="Uniform" />
+                    <Thumb Style="{StaticResource ResizeGripStyle}"
+                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                           DragStarted="ResizeGrip_DragStarted"
+                           DragDelta="ResizeGrip_DragDelta"
+                           DragCompleted="ResizeGrip_DragCompleted" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Une vidéo. Dans l'éditeur elle joue en boucle et sans son :
+             on vérifie son contenu sans gêner le reste du travail.
+             Pendant le diaporama, elle se lit avec le son. -->
+        <DataTemplate DataType="{x:Type models:VideoElement}">
+            <Border Style="{StaticResource ElementFrameStyle}"
+                    Width="{Binding Width}" Height="{Binding Height}">
+                <Grid Background="Black">
+                    <MediaElement Source="{Binding VideoPath}"
+                                  LoadedBehavior="Manual"
+                                  ScrubbingEnabled="True"
+                                  IsMuted="True"
+                                  Stretch="Uniform"
+                                  Loaded="VideoPlayer_Loaded"
+                                  Unloaded="VideoPlayer_Unloaded"
+                                  MediaEnded="VideoPlayer_MediaEnded" />
+                    <Border Background="#B3000000"
+                            CornerRadius="3"
+                            Padding="6,2"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Margin="6"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="VIDEO"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="White" />
+                    </Border>
+                    <Thumb Style="{StaticResource ResizeGripStyle}"
+                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                           DragStarted="ResizeGrip_DragStarted"
+                           DragDelta="ResizeGrip_DragDelta"
+                           DragCompleted="ResizeGrip_DragCompleted" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Une forme -->
+        <DataTemplate DataType="{x:Type models:ShapeElement}">
+            <Border Style="{StaticResource ElementFrameStyle}"
+                    Width="{Binding Width}" Height="{Binding Height}">
+                <Grid>
+                    <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                               Fill="{Binding Fill}" Stroke="{Binding Stroke}" StrokeThickness="1"
+                               RadiusX="{Binding CornerRadius}" RadiusY="{Binding CornerRadius}" />
+                    <Thumb Style="{StaticResource ResizeGripStyle}"
+                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                           DragStarted="ResizeGrip_DragStarted"
+                           DragDelta="ResizeGrip_DragDelta"
+                           DragCompleted="ResizeGrip_DragCompleted" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Un tableau -->
+        <DataTemplate DataType="{x:Type models:TableElement}">
+            <Border Style="{StaticResource ElementFrameStyle}"
+                    Width="{Binding Width}" Height="{Binding Height}">
+                <Grid>
+                    <Border Background="{Binding Fill}"
+                            BorderBrush="{Binding Stroke}"
+                            BorderThickness="1">
+                        <ItemsControl ItemsSource="{Binding Cells}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="{Binding Columns}" Rows="{Binding Rows}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                            <!-- Une cellule. Double-clic sur le texte : il est remplacé
+                                 par une zone de saisie (IsEditing de la TableCell). -->
+                            <DataTemplate>
+                                <Border BorderBrush="#D1D5DB" BorderThickness="0,0,1,1" Padding="6"
+                                        Background="Transparent"
+                                        MouseLeftButtonDown="TableCell_MouseLeftButtonDown">
+                                    <Grid>
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontSize="{Binding DataContext.FontSize,
+                                                       RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   Foreground="#1F2937"
+                                                   TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="{Binding DataContext.FontSize,
+                                                     RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                 Foreground="#1F2937"
+                                                 Background="Transparent"
+                                                 BorderBrush="{StaticResource AccentBrush}"
+                                                 BorderThickness="1"
+                                                 Padding="0"
+                                                 Margin="-1"
+                                                 TextWrapping="Wrap"
+                                                 VerticalContentAlignment="Top"
+                                                 Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+                                                 IsVisibleChanged="EditableTextBox_IsVisibleChanged"
+                                                 LostFocus="EditableTextBox_LostFocus"
+                                                 PreviewKeyDown="EditableTextBox_PreviewKeyDown" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <Thumb Style="{StaticResource ResizeGripStyle}"
+                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                           DragStarted="ResizeGrip_DragStarted"
+                           DragDelta="ResizeGrip_DragDelta"
+                           DragCompleted="ResizeGrip_DragCompleted" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- La surface d'une diapositive : fond + éléments positionnés -->
+        <DataTemplate x:Key="SlideSurfaceTemplate">
+            <Grid Width="960" Height="540" Background="{Binding BackgroundColor}" ClipToBounds="True">
+                <ItemsControl ItemsSource="{Binding Elements}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{Binding X}" />
+                            <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
+                </ItemsControl>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Une ligne de la liste de miniatures -->
+        <DataTemplate x:Key="ThumbnailTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem},
+                                   Path=(ItemsControl.AlternationIndex),
+                                   Converter={StaticResource IndexPlusOneConverter}}"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Top"
+                           Margin="0,2,0,0" />
+
+                <Border Grid.Column="1"
+                        Background="White"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1">
+                    <Viewbox Stretch="Uniform">
+                        <ContentPresenter Content="{Binding}"
+                                          ContentTemplate="{StaticResource SlideSurfaceTemplate}" />
+                    </Viewbox>
+                </Border>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <!-- Onglet View : cette hauteur passe à 0 quand les notes sont masquées. -->
+            <RowDefinition Height="{Binding ShowNotesPanel,
+                                        Converter={StaticResource PanelWidthConverter},
+                                        ConverterParameter=150}" />
+            <RowDefinition Height="30" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================================================
+             1. BARRE DE TITRE PERSONNALISÉE
+             ============================================================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Border Width="22" Height="22" CornerRadius="6" Background="{StaticResource AccentBrush}">
+                        <TextBlock Text="S" Foreground="White" FontSize="13" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="SlideCraft" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}"
+                               VerticalAlignment="Center" Margin="8,0,0,0" />
+                    <Rectangle Width="1" Height="14" Fill="{StaticResource BorderBrush}" Margin="12,0" />
+                    <TextBlock Text="{Binding DocumentTitle}"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            Content="&#xE921;" ToolTip="Minimize"
+                            Click="MinimizeButton_Click" />
+                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            Content="&#xE922;" ToolTip="Maximize"
+                            Click="MaximizeButton_Click" />
+                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            Content="&#xE8BB;" ToolTip="Close"
+                            Click="CloseButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================
+             2. RUBAN : ONGLET FILE + 7 ONGLETS
+             Le bouton File n'est pas un onglet comme les autres : il ouvre
+             une page entière (le « backstage »), exactement comme dans
+             PowerPoint. Les boutons IsEnabled="False" seront activés aux
+             étapes suivantes du projet (indiqué dans leur ToolTip).
+             ============================================================ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Button Content="File"
+                    Style="{StaticResource FileTabStyle}"
+                    Command="{Binding OpenBackstageCommand}"
+                    VerticalAlignment="Top"
+                    ToolTip="New, open, save, export and close" />
+
+            <TabControl Grid.Column="1"
+                        Style="{StaticResource RibbonTabControlStyle}"
+                        SelectedIndex="0">
+
+                <!-- ================= Onglet Home ================= -->
+                <TabItem Header="Home" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE710;" Content="New Slide"
+                                        Command="{Binding AddSlideCommand}"
+                                        ToolTip="Add a slide after the selected one" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8C8;" Content="Duplicate"
+                                        Command="{Binding DuplicateSlideCommand}"
+                                        ToolTip="Copy the selected slide right after it" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE74D;" Content="Delete"
+                                        Command="{Binding DeleteSlideCommand}"
+                                        ToolTip="Delete the selected slide (at least one must remain)" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE74A;" Content="Move Up"
+                                        Command="{Binding MoveSlideUpCommand}"
+                                        ToolTip="Move the slide up" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE74B;" Content="Move Down"
+                                        Command="{Binding MoveSlideDownCommand}"
+                                        ToolTip="Move the slide down" />
+                            </StackPanel>
+                            <TextBlock Text="Slides" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE77F;" Content="Paste"
+                                        Command="{Binding PasteElementCommand}"
+                                        ToolTip="Paste a copy of the copied element" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8C8;" Content="Copy"
+                                        Command="{Binding CopyElementCommand}"
+                                        ToolTip="Copy the selected element" />
+                            </StackPanel>
+                            <TextBlock Text="Clipboard" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE7A7;" Content="Undo"
+                                        Command="{Binding UndoCommand}"
+                                        ToolTip="Undo the last action (Ctrl+Z)" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE7A6;" Content="Redo"
+                                        Command="{Binding RedoCommand}"
+                                        ToolTip="Redo the undone action (Ctrl+Y)" />
+                            </StackPanel>
+                            <TextBlock Text="Editing" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE71E;" Content="Zoom In"
+                                        Command="{Binding ZoomInCommand}"
+                                        ToolTip="Zoom in" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE71F;" Content="Zoom Out"
+                                        Command="{Binding ZoomOutCommand}"
+                                        ToolTip="Zoom out" />
+                            </StackPanel>
+                            <TextBlock Text="Zoom" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Insert ================= -->
+                <TabItem Header="Insert" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8D2;" Content="Text Box"
+                                        Command="{Binding InsertTextCommand}"
+                                        ToolTip="Add a text box" />
+                            </StackPanel>
+                            <TextBlock Text="Text" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8B9;" Content="Pictures"
+                                        Command="{Binding InsertImageCommand}"
+                                        ToolTip="Insert a picture from your computer" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE7C4;" Content="Shapes"
+                                        Command="{Binding InsertShapeCommand}"
+                                        ToolTip="Insert a rounded rectangle" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE714;" Content="Video"
+                                        Command="{Binding InsertVideoCommand}"
+                                        ToolTip="Insert a video from your computer. It plays muted here and with sound during the slide show." />
+                            </StackPanel>
+                            <TextBlock Text="Illustrations" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A9;" Content="Table"
+                                        Command="{Binding InsertTableCommand}"
+                                        ToolTip="Insert a 3 x 3 table" />
+                            </StackPanel>
+                            <TextBlock Text="Tables" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8BD;" Content="Quiz"
+                                        Command="{Binding EditQuizCommand}"
+                                        ToolTip="Add or edit the quiz shown at the end of this slide" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8FA;" Content="Subtitles"
+                                        Command="{Binding EditSubtitlesCommand}"
+                                        ToolTip="Write the two languages of the subtitles for this slide" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE82D;" Content="Glossary"
+                                        IsEnabled="False" ToolTip="GlossarySlide feature" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE70F;" Content="Notes"
+                                        IsEnabled="False" ToolTip="Notes are already editable at the bottom of the window" />
+                            </StackPanel>
+                            <TextBlock Text="SlideCraft" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <!-- Importer un fichier créé dans PowerPoint. -->
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8B5;" Content="PowerPoint"
+                                        Command="{Binding ImportPowerPointCommand}"
+                                        ToolTip="Open a .pptx file: text, pictures, tables, colours and notes are converted into SlideCraft slides." />
+                            </StackPanel>
+                            <TextBlock Text="Import" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Design ================= -->
+                <TabItem Header="Design" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="64">
+                                <Button Style="{StaticResource SwatchButtonStyle}" Background="#FFFFFF"
+                                        Command="{Binding SetBackgroundCommand}" CommandParameter="#FFFFFF"
+                                        ToolTip="White background" />
+                                <Button Style="{StaticResource SwatchButtonStyle}" Background="#F5F3FF"
+                                        Command="{Binding SetBackgroundCommand}" CommandParameter="#F5F3FF"
+                                        ToolTip="Light purple background" />
+                                <Button Style="{StaticResource SwatchButtonStyle}" Background="#ECFDF5"
+                                        Command="{Binding SetBackgroundCommand}" CommandParameter="#ECFDF5"
+                                        ToolTip="Light green background" />
+                                <Button Style="{StaticResource SwatchButtonStyle}" Background="#FEF3C7"
+                                        Command="{Binding SetBackgroundCommand}" CommandParameter="#FEF3C7"
+                                        ToolTip="Light yellow background" />
+                                <Button Style="{StaticResource SwatchButtonStyle}" Background="#111827"
+                                        Command="{Binding SetBackgroundCommand}" CommandParameter="#111827"
+                                        ToolTip="Dark background" />
+                            </StackPanel>
+                            <TextBlock Text="Background" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <!-- ToggleButton + Popup : menu déroulant sans code C#,
+                                     l'ouverture est pilotée par IsLayoutMenuOpen. -->
+                                <ToggleButton x:Name="LayoutMenuToggle"
+                                              Style="{StaticResource RibbonToggleButtonStyle}"
+                                              Tag="&#xE8A9;" Content="Layout"
+                                              IsChecked="{Binding IsLayoutMenuOpen, Mode=TwoWay}"
+                                              IsEnabled="{Binding HasSelectedSlide}"
+                                              ToolTip="Apply a layout to the slide" />
+                            </StackPanel>
+                            <TextBlock Text="Layout" Style="{StaticResource GroupCaptionStyle}" />
+
+                            <Popup IsOpen="{Binding IsLayoutMenuOpen, Mode=TwoWay}"
+                                   PlacementTarget="{Binding ElementName=LayoutMenuToggle}"
+                                   Placement="Bottom"
+                                   StaysOpen="False"
+                                   AllowsTransparency="True"
+                                   PopupAnimation="Fade">
+                                <Border Background="{StaticResource SurfaceBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="6"
+                                        Width="300">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.18" Direction="270" />
+                                    </Border.Effect>
+                                    <ItemsControl ItemsSource="{Binding Layouts}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource LayoutMenuItemStyle}"
+                                                        Command="{Binding DataContext.ApplyLayoutCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   FontSize="12.5" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource TextBrush}" />
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   FontSize="11"
+                                                                   Foreground="{StaticResource MutedTextBrush}"
+                                                                   Margin="0,1,0,0" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </Popup>
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE82F;" Content="SmartSlide"
+                                        Command="{Binding AnalyzeSlidesCommand}"
+                                        ToolTip="Check slide quality (score and advice)" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE83D;" Content="DesignGuard"
+                                        IsEnabled="False" ToolTip="DesignGuard feature" />
+                            </StackPanel>
+                            <TextBlock Text="Analysis" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Transitions =================
+                     Une transition est l'effet d'ENTRÉE d'une diapositive :
+                     ce qui se passe au moment où l'on passe à la suivante.
+                     Le choix est enregistré avec la diapositive et rejoué
+                     pendant le diaporama (bouton « Preview »). -->
+                <TabItem Header="Transitions" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A7;" Content="None"
+                                        Command="{Binding SetTransitionCommand}" CommandParameter="None"
+                                        ToolTip="No effect: the next slide appears instantly." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A7;" Content="Fade"
+                                        Command="{Binding SetTransitionCommand}" CommandParameter="Fade"
+                                        ToolTip="Fade: the next slide appears gradually." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A7;" Content="Push"
+                                        Command="{Binding SetTransitionCommand}" CommandParameter="Push"
+                                        ToolTip="Push: the next slide slides in from the side." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A7;" Content="Wipe"
+                                        Command="{Binding SetTransitionCommand}" CommandParameter="Wipe"
+                                        ToolTip="Wipe: the next slide is revealed from one side." />
+                            </StackPanel>
+                            <TextBlock Text="{Binding CurrentTransitionLabel}"
+                                       Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8B0;" Content="Apply to All"
+                                        Command="{Binding ApplyTransitionToAllCommand}"
+                                        ToolTip="Give every slide the same transition as this one, in one undoable action." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE768;" Content="Preview"
+                                        Command="{Binding StartSlideShowCommand}"
+                                        ToolTip="Start the slide show to see the transition for real (F5)." />
+                            </StackPanel>
+                            <TextBlock Text="Apply" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Slide Show ================= -->
+                <TabItem Header="Slide Show" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE768;" Content="From Current Slide"
+                                        Command="{Binding StartSlideShowCommand}"
+                                        ToolTip="Start the slide show from the selected slide (F5)" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE77B;" Content="Presenter Coach"
+                                        IsEnabled="False" ToolTip="PresenterCoach feature" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE823;" Content="TimeSlide"
+                                        IsEnabled="False" ToolTip="TimeSlide feature" />
+                            </StackPanel>
+                            <TextBlock Text="Start Slide Show" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <!-- La voix qui lit les diapositives : chaque voix de
+                             Windows ne parle qu'une langue, d'où cette fenêtre. -->
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE720;" Content="Narration Voice"
+                                        Click="NarrationVoiceButton_Click"
+                                        ToolTip="Choose the Windows voice that reads your slides aloud, hear it first, and see which language it speaks." />
+                            </StackPanel>
+                            <TextBlock Text="Voice" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <!-- Mode jeu : les joueurs sont saisis sur ce PC,
+                             la salle vote à main levée. Aucun réseau. -->
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE716;" Content="Game Setup"
+                                        Command="{Binding ConfigureGameCommand}"
+                                        ToolTip="Enter the player names for the quiz game (one per line)" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding GamePlayersLabel}"
+                                       Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE707;" Content="Story Map"
+                                        IsEnabled="False" ToolTip="StoryMap feature" />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A9;" Content="Revision"
+                                        IsEnabled="False" ToolTip="RevisionMode feature" />
+                            </StackPanel>
+                            <TextBlock Text="Organize" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Review =================
+                     Deux contrôles réels : le rapport SmartSlide (qualité
+                     des diapositives) et le résumé de revue (taille, temps
+                     de lecture, historique des modifications). -->
+                <TabItem Header="Review" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE9D9;" Content="Check Slides"
+                                        Command="{Binding AnalyzeSlidesCommand}"
+                                        ToolTip="Score every slide and list what should be improved (SmartSlide report)." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A5;" Content="Review Summary"
+                                        Command="{Binding ReviewCommand}"
+                                        ToolTip="Word count, reading time, missing notes and the list of your changes." />
+                            </StackPanel>
+                            <TextBlock Text="Inspect" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE7A7;" Content="Undo"
+                                        Command="{Binding UndoCommand}"
+                                        ToolTip="Undo the last change (Ctrl+Z)." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE7A6;" Content="Redo"
+                                        Command="{Binding RedoCommand}"
+                                        ToolTip="Redo the last undone change (Ctrl+Y)." />
+                            </StackPanel>
+                            <TextBlock Text="Changes" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet View =================
+                     Zoom réel et panneaux réellement masquables :
+                     les miniatures, les propriétés et les notes. -->
+                <TabItem Header="View" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE8A3;" Content="100%"
+                                        Command="{Binding ResetZoomCommand}"
+                                        ToolTip="Back to the normal size." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE71E;" Content="Zoom In"
+                                        Command="{Binding ZoomInCommand}"
+                                        ToolTip="Make the slide bigger on screen." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE71F;" Content="Zoom Out"
+                                        Command="{Binding ZoomOutCommand}"
+                                        ToolTip="Make the slide smaller on screen." />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ZoomLabel}" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton Style="{StaticResource RibbonToggleButtonStyle}"
+                                              Tag="&#xE8FD;" Content="Slides"
+                                              IsChecked="{Binding ShowThumbnails, Mode=TwoWay}"
+                                              ToolTip="Show or hide the list of slide thumbnails on the left." />
+                                <ToggleButton Style="{StaticResource RibbonToggleButtonStyle}"
+                                              Tag="&#xE8A5;" Content="Properties"
+                                              IsChecked="{Binding ShowPropertiesPanel, Mode=TwoWay}"
+                                              ToolTip="Show or hide the properties panel on the right." />
+                                <ToggleButton Style="{StaticResource RibbonToggleButtonStyle}"
+                                              Tag="&#xE70F;" Content="Notes"
+                                              IsChecked="{Binding ShowNotesPanel, Mode=TwoWay}"
+                                              ToolTip="Show or hide the speaker notes and narration script at the bottom." />
+                            </StackPanel>
+                            <TextBlock Text="Show panels" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource GroupSeparatorStyle}" />
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE768;" Content="Slide Show"
+                                        Command="{Binding StartSlideShowCommand}"
+                                        ToolTip="Show the presentation full screen (F5)." />
+                            </StackPanel>
+                            <TextBlock Text="Present" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ================= Onglet Help ================= -->
+                <TabItem Header="Help" Style="{StaticResource RibbonTabItemStyle}">
+                    <StackPanel Orientation="Horizontal">
+
+                        <StackPanel Margin="6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE897;" Content="Quick Guide"
+                                        Click="HelpButton_Click"
+                                        ToolTip="A short guide in simple words: what every tab does and what each feature is for." />
+                                <Button Style="{StaticResource RibbonButtonStyle}" Tag="&#xE720;" Content="Narration Voice"
+                                        Click="NarrationVoiceButton_Click"
+                                        ToolTip="Choose the language of the voice that reads your slides." />
+                            </StackPanel>
+                            <TextBlock Text="Learn" Style="{StaticResource GroupCaptionStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <!-- ============================================================
+             2 bis. PAGE FILE (BACKSTAGE)
+             Elle recouvre le ruban, la zone de travail et la barre d'état,
+             comme la page File de PowerPoint. Le ViewModel décide de son
+             affichage avec IsBackstageOpen ; chaque action la referme.
+             ============================================================ -->
+        <Grid Grid.Row="1" Grid.RowSpan="4"
+              Panel.ZIndex="20"
+              Visibility="{Binding IsBackstageOpen, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="252" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Colonne de navigation, sur fond sombre -->
+            <Border Background="#1F2937">
+                <StackPanel Margin="0,12,0,0">
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE72B;" Content="Back to editing"
+                            Command="{Binding CloseBackstageCommand}"
+                            ToolTip="Close the File page and return to the editor" />
+
+                    <Rectangle Height="1" Fill="#374151" Margin="18,10,18,10" />
+
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE7C3;" Content="New"
+                            Command="{Binding NewPresentationCommand}"
+                            ToolTip="Start a new presentation (Ctrl+N)" />
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE8E5;" Content="Open"
+                            Command="{Binding OpenPresentationCommand}"
+                            ToolTip="Open a .scraft presentation (Ctrl+O)" />
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE8B5;" Content="Import PowerPoint"
+                            Command="{Binding ImportPowerPointCommand}"
+                            ToolTip="Convert a PowerPoint file (.pptx) into a SlideCraft presentation" />
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE74E;" Content="Save"
+                            Command="{Binding SavePresentationCommand}"
+                            ToolTip="Save the presentation (Ctrl+S)" />
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE792;" Content="Save As"
+                            Command="{Binding SaveAsPresentationCommand}"
+                            ToolTip="Save the presentation under another name" />
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE8B5;" Content="Export"
+                            Command="{Binding ExportPowerPointCommand}"
+                            ToolTip="Export a copy in PowerPoint format (.pptx) plus a notes file (.txt)" />
+
+                    <Rectangle Height="1" Fill="#374151" Margin="18,10,18,10" />
+
+                    <Button Style="{StaticResource BackstageButtonStyle}"
+                            Tag="&#xE8BB;" Content="Close"
+                            Click="CloseButton_Click"
+                            ToolTip="Close SlideCraft" />
+                </StackPanel>
+            </Border>
+
+            <!-- Page d'informations -->
+            <ScrollViewer Grid.Column="1"
+                          Background="{StaticResource SurfaceBrush}"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="56,40,56,40" MaxWidth="780" HorizontalAlignment="Left">
+
+                    <TextBlock Text="Info"
+                               FontSize="26" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}" />
+
+                    <TextBlock Text="{Binding DocumentFileName}"
+                               FontSize="15"
+                               Foreground="{StaticResource TextBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,18,0,0" />
+                    <TextBlock Text="{Binding DocumentLocation}"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,3,0,0" />
+
+                    <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,22,0,0" />
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="Slides" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,12" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SlideCount}"
+                                   FontSize="12.5" Foreground="{StaticResource TextBrush}" Margin="0,0,0,12" />
+
+                        <TextBlock Grid.Row="1" Text="Status" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,12" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DocumentState}"
+                                   FontSize="12.5" Foreground="{StaticResource TextBrush}" Margin="0,0,0,12" />
+
+                        <TextBlock Grid.Row="2" Text="File format" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,12" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="SlideCraft presentation (.scraft)"
+                                   FontSize="12.5" Foreground="{StaticResource TextBrush}" Margin="0,0,0,12" />
+
+                        <TextBlock Grid.Row="3" Text="Zoom" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ZoomLabel}"
+                                   FontSize="12.5" Foreground="{StaticResource TextBrush}" />
+                    </Grid>
+
+                    <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,22,0,0" />
+
+                    <TextBlock Text="Export"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}"
+                               Margin="0,18,0,0" />
+                    <TextBlock Text="Create a copy of this presentation in PowerPoint format (.pptx), next to a text file (name-notes.txt) with your presenter notes and bilingual subtitles. Your .scraft file stays untouched, so you can keep editing it afterwards."
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0" />
+                    <Button Content="Export to PowerPoint"
+                            Command="{Binding ExportPowerPointCommand}"
+                            Padding="16,9"
+                            FontSize="12.5"
+                            Background="{StaticResource AccentBrush}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            HorizontalAlignment="Left"
+                            Margin="0,12,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ============================================================
+             3. ZONE DE TRAVAIL : miniatures | diapositive | propriétés
+             ============================================================ -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <!-- Onglet View : une colonne masquée prend une largeur de 0,
+                     sinon elle laisserait un grand vide à côté de la diapositive. -->
+                <ColumnDefinition Width="{Binding ShowThumbnails,
+                                             Converter={StaticResource PanelWidthConverter},
+                                             ConverterParameter=196}" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="{Binding ShowPropertiesPanel,
+                                             Converter={StaticResource PanelWidthConverter},
+                                             ConverterParameter=272}" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ==== Miniatures ==== -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,1,0"
+                    Visibility="{Binding ShowThumbnails, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="SLIDES"
+                               Style="{StaticResource SectionTitleStyle}"
+                               Margin="14,10,14,6" />
+                    <ListBox ItemsSource="{Binding Slides}"
+                             SelectedItem="{Binding SelectedSlide, Mode=TwoWay}"
+                             AlternationCount="1000"
+                             ItemContainerStyle="{StaticResource ThumbnailItemStyle}"
+                             ItemTemplate="{StaticResource ThumbnailTemplate}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="8,0,8,8"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                </DockPanel>
+            </Border>
+
+            <!-- ==== Zone de travail (diapositive + zoom) ==== -->
+            <Grid Grid.Column="1" Background="{StaticResource AppBackgroundBrush}">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              Padding="0">
+                    <Grid Margin="36">
+                        <Border Width="960" Height="540"
+                                Background="White"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                MouseLeftButtonDown="SlideCanvas_MouseLeftButtonDown">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="24" ShadowDepth="3" Opacity="0.18" Direction="270" />
+                            </Border.Effect>
+                            <Border.LayoutTransform>
+                                <ScaleTransform ScaleX="{Binding ZoomFactor}" ScaleY="{Binding ZoomFactor}" />
+                            </Border.LayoutTransform>
+                            <ContentPresenter Content="{Binding SelectedSlide}"
+                                              ContentTemplate="{StaticResource SlideSurfaceTemplate}" />
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ==== Panneau de propriétés ==== -->
+            <Border Grid.Column="2"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1,0,0,0"
+                    Visibility="{Binding ShowPropertiesPanel, Converter={StaticResource BoolToVisibility}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,8,16,16">
+                        <TextBlock Text="PROPERTIES" Style="{StaticResource SectionTitleStyle}" />
+
+                        <TextBlock Text="Slide title" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                 Text="{Binding CurrentSlideTitle, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+
+                        <TextBlock Text="Background" Style="{StaticResource FieldLabelStyle}" Margin="0,12,0,4" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#FFFFFF"
+                                    Command="{Binding SetBackgroundCommand}" CommandParameter="#FFFFFF" />
+                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#F5F3FF"
+                                    Command="{Binding SetBackgroundCommand}" CommandParameter="#F5F3FF" />
+                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#ECFDF5"
+                                    Command="{Binding SetBackgroundCommand}" CommandParameter="#ECFDF5" />
+                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#FEF3C7"
+                                    Command="{Binding SetBackgroundCommand}" CommandParameter="#FEF3C7" />
+                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#111827"
+                                    Command="{Binding SetBackgroundCommand}" CommandParameter="#111827" />
+                        </StackPanel>
+
+                        <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,16,0,0" />
+
+                        <!-- Propriétés de l'élément sélectionné -->
+                        <StackPanel Visibility="{Binding HasSelectedElement, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="SELECTED ELEMENT" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="{Binding SelectedElement.TypeLabel, StringFormat='Type: {0}'}"
+                                       FontSize="12" Foreground="{StaticResource TextBrush}" />
+                            <TextBlock Text="{Binding SelectedElement.Name, StringFormat='Name: {0}'}"
+                                       FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,0" />
+
+                            <!-- Contenu d'un bloc de texte (visible seulement pour un texte) -->
+                            <StackPanel Margin="0,12,0,0"
+                                        Visibility="{Binding IsTextElementSelected, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Content" Style="{StaticResource FieldLabelStyle}" />
+                                <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         Height="96"
+                                         VerticalContentAlignment="Top"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Text="{Binding SelectedText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Size" Style="{StaticResource FieldLabelStyle}" />
+                                        <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                                 Text="{Binding SelectedFontSize, Mode=TwoWay, StringFormat=0, UpdateSourceTrigger=LostFocus}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Color" Style="{StaticResource FieldLabelStyle}" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#111827"
+                                                    Command="{Binding SetForegroundCommand}" CommandParameter="#111827"
+                                                    ToolTip="Black text" />
+                                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#4F46E5"
+                                                    Command="{Binding SetForegroundCommand}" CommandParameter="#4F46E5"
+                                                    ToolTip="Indigo text" />
+                                            <Button Style="{StaticResource SwatchButtonStyle}" Background="#B91C1C"
+                                                    Command="{Binding SetForegroundCommand}" CommandParameter="#B91C1C"
+                                                    ToolTip="Red text" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Remplissage d'une forme -->
+                            <StackPanel Margin="0,12,0,0"
+                                        Visibility="{Binding IsShapeElementSelected, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Shape fill" Style="{StaticResource FieldLabelStyle}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Style="{StaticResource SwatchButtonStyle}" Background="#6366F1"
+                                            Command="{Binding SetFillCommand}" CommandParameter="#6366F1"
+                                            ToolTip="Indigo" />
+                                    <Button Style="{StaticResource SwatchButtonStyle}" Background="#10B981"
+                                            Command="{Binding SetFillCommand}" CommandParameter="#10B981"
+                                            ToolTip="Green" />
+                                    <Button Style="{StaticResource SwatchButtonStyle}" Background="#F59E0B"
+                                            Command="{Binding SetFillCommand}" CommandParameter="#F59E0B"
+                                            ToolTip="Orange" />
+                                    <Button Style="{StaticResource SwatchButtonStyle}" Background="#EF4444"
+                                            Command="{Binding SetFillCommand}" CommandParameter="#EF4444"
+                                            ToolTip="Red" />
+                                    <Button Style="{StaticResource SwatchButtonStyle}" Background="#111827"
+                                            Command="{Binding SetFillCommand}" CommandParameter="#111827"
+                                            ToolTip="Black" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Position X" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                             Text="{Binding ElementX, Mode=TwoWay, StringFormat=0, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Position Y" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                             Text="{Binding ElementY, Mode=TwoWay, StringFormat=0, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Width" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                             Text="{Binding ElementWidth, Mode=TwoWay, StringFormat=0, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Height" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                                             Text="{Binding ElementHeight, Mode=TwoWay, StringFormat=0, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Button Content="Delete element (Del)"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding DeleteElementCommand}"
+                                    Margin="0,14,0,0"
+                                    HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <TextBlock Text="Click an element on the slide to show its properties."
+                                   TextWrapping="Wrap"
+                                   FontSize="12"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   Margin="0,18,0,0"
+                                   Visibility="{Binding HasSelectedElement, Converter={StaticResource InverseBoolToVisibility}}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- ============================================================
+             4. ZONE DE NOTES DU PRÉSENTATEUR
+             ============================================================ -->
+        <Border Grid.Row="3"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Visibility="{Binding ShowNotesPanel, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="16,8,16,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Notes privées : jamais projetées, jamais lues à voix haute. -->
+                <DockPanel Grid.Column="0">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <TextBlock Text="SPEAKER NOTES" Style="{StaticResource SectionTitleStyle}" Margin="0,0,10,4" />
+                        <TextBlock Text="(private: never shown to the audience)"
+                                   FontSize="10.5"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,10,0,0" />
+                    </StackPanel>
+                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             VerticalContentAlignment="Top"
+                             Text="{Binding SelectedSlide.Notes.PersonalNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </DockPanel>
+
+                <Rectangle Grid.Column="1" Width="1" Fill="{StaticResource BorderBrush}" Margin="18,0" />
+
+                <!-- Script de narration : c'est CE texte que la voix lit pendant
+                     le diaporama. Vide, la voix lit le titre et les textes. -->
+                <DockPanel Grid.Column="2">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <TextBlock Text="NARRATION SCRIPT" Style="{StaticResource SectionTitleStyle}" Margin="0,0,10,4" />
+                        <TextBlock Text="(read aloud during the show)"
+                                   FontSize="10.5"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,10,0,0" />
+                    </StackPanel>
+                    <TextBox Style="{StaticResource FieldTextBoxStyle}"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             VerticalContentAlignment="Top"
+                             Text="{Binding SelectedSlide.Notes.NarrationText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </DockPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================
+             5. BARRE D'ÉTAT
+             ============================================================ -->
+        <Border Grid.Row="4"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="14,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource MutedTextBrush}">
+                    <Run Text="Slide " />
+                    <Run Text="{Binding CurrentSlideNumber, Mode=OneWay}" />
+                    <Run Text=" / " />
+                    <Run Text="{Binding SlideCount, Mode=OneWay}" />
+                </TextBlock>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusMessage}"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           VerticalAlignment="Center"
+                           Margin="24,0,0,0" />
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ZoomLabel}"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <Slider Width="130"
+                            Minimum="25" Maximum="200"
+                            Value="{Binding Zoom, Mode=TwoWay}"
+                            SmallChange="5" LargeChange="25"
+                            VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
