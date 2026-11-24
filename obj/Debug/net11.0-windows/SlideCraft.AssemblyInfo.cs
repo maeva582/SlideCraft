@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SlideCraft")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d645ccc5edca6b301291396272f703d22526cfa2")]
 [assembly: System.Reflection.AssemblyProductAttribute("SlideCraft")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SlideCraft")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
