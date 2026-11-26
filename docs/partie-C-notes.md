@@ -29,3 +29,12 @@
 - `Award(player)` : donne les points à UN seul joueur par question, pour éviter qu'un clic en trop double le score.
 - `RefreshLeaderboard` : classement trié par score décroissant, puis par nom.
 - `ToggleLeaderboard` : ouvre ou ferme le classement (touche L).
+
+
+## NarrationTextBuilder (Services/NarrationTextBuilder.cs)
+- Il prépare le texte lu par la voix pour une diapositive. Il ne dépend ni de WPF ni de Windows : la voix n'est que le « haut-parleur » branché à la fin.
+- Cas 1 : si un script de narration est écrit (`Notes.NarrationText`), on le lit tel quel.
+- Cas 2 : sinon `BuildFromContent` lit le titre, puis les textes et les cellules de tableau, dans l'ordre de la diapositive. Le titre n'est pas répété s'il est déjà affiché.
+- `Clean` : enlève les puces (•, -, *…), transforme les retours à la ligne en virgules et réduit les espaces multiples. Exemple : « • Un / • Deux » devient « Un, Deux ».
+- `EnsureSentenceEnd` : ajoute un point final si le texte n'a pas déjà . ! ? : ou ;
+- Les images et les formes n'ont rien à lire : leur texte est vide.
