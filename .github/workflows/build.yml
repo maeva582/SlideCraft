@@ -1,0 +1,30 @@
+name: Build Windows
+
+on:
+  push:
+    branches:
+      - main
+      - feat/qualite-ci
+  pull_request:
+    branches:
+      - main
+      - feat/qualite-ci
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore SlideCraft.csproj
+
+      - name: Build project
+        run: dotnet build SlideCraft.csproj --configuration Release --no-restore
