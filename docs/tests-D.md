@@ -17,3 +17,19 @@ Vérifier le comportement de SmartSlide face aux situations inhabituelles et aux
 ## Conclusion
 
 Les résultats définitifs seront renseignés après exécution des tests.
+
+## D3 – Tests de mise à l'échelle
+
+### Objectif
+
+Vérifier l'affichage et le fonctionnement de SmartSlide selon différents niveaux de mise à l'échelle Windows.
+
+| ID    | Échelle | Vérifications              | Résultat     |
+| ----- | ------: | -------------------------- | ------------ |
+| D3-01 |   100 % | Affichage et accessibilité | À renseigner |
+| D3-02 |   125 % | Affichage et accessibilité | À renseigner |
+| D3-03 |   150 % | Affichage et accessibilité | À renseigner |
+
+### Conclusion
+
+Les résultats sont à compléter après exécution des trois tests.
