@@ -1,5 +1,7 @@
 # SlideCraft
 
+[![Build Windows](https://github.com/maeva582/SlideCraft/actions/workflows/build.yml/badge.svg?branch=feat/qualite-ci)](https://github.com/maeva582/SlideCraft/actions/workflows/build.yml)
+
 **SlideCraft** est un logiciel de présentation de bureau écrit en **C# / WPF** (.NET 11).
 Il permet de créer des diapositives, d'y insérer du texte, des images et des
 vidéos, de les projeter en plein écran, d'y ajouter des notes de présentateur,
@@ -29,21 +31,21 @@ externe, aucune télémétrie. Tout est stocké dans des fichiers locaux.
 
 ## Fonctionnalités
 
-| Domaine | Ce que l'application sait faire |
-|---|---|
-| Édition | Ajouter, supprimer, dupliquer et réordonner des diapositives ; choisir un arrière-plan ; zoomer dans l'éditeur ; appliquer des dispositions (titre, titre + contenu, vide…). |
-| Contenu | Insérer du texte, des images, des **vidéos**, des formes et des tableaux ; déplacer, redimensionner, mettre en forme ; copier/coller un élément ; annuler et rétablir (Undo/Redo). Une vidéo joue en boucle et sans son dans l'éditeur, avec le son pendant le diaporama ; elle est **recopiée dans un dossier `nom_media` à côté du projet**. |
-| Fichiers | Enregistrer et ouvrir une présentation au format `.scraft` (XML lisible) ; exporter une copie en `.pptx` (textes, images, vidéos, formes, tableaux) ; **importer un fichier `.pptx`** (textes, images, vidéos, tableaux, fonds, notes). |
-| Diaporama | Projection plein écran, navigation au clavier, affichage des sous-titres en bas de l'écran. |
-| Transitions | Effet d'entrée par diapositive (**None, Fade, Push, Wipe**), réellement joué pendant le diaporama ; « Apply to All » pour toutes les diapositives ; enregistré dans le `.scraft` et exporté en `.pptx`. |
-| Onglets Review et View | Review : rapport SmartSlide, résumé de revue (nombre de mots, temps de lecture estimé, notes manquantes, historique des modifications avec Undo/Redo). View : zoom réel (100 %, +, −) et panneaux miniatures / propriétés / notes réellement masquables. |
-| SmartSlide | Analyse automatique des diapositives (texte trop long, chevauchements, contraste…) avec des conseils. |
-| Narration | Synthèse vocale hors ligne via les voix Windows (`System.Speech`) : lecture d'un texte de narration écrit par l'utilisateur. La voix se choisit dans **Slide Show → Narration Voice**, avec sa langue et une phrase d'essai. |
-| Aide | Onglet **Help → Quick Guide** : un guide court en anglais simple qui explique à quoi sert chaque onglet, chaque fonction et chaque raccourci. |
-| Quiz et jeu | Création de questions à choix multiples par diapositive, mode « jeu » avec joueurs et votes **sur le PC du présentateur**, résultats calculés localement. |
-| Sous-titres | Deux langues saisies à la main (pas de traduction automatique), affichées pendant la projection. |
-| Notes | Notes personnelles, conseil du coach, texte de narration et durée cible par diapositive. |
-| Export texte | Après chaque export `.pptx`, un fichier `nom-notes.txt` est écrit à côté : notes, conseil, narration et sous-titres de toutes les diapositives. |
+| Domaine                | Ce que l'application sait faire                                                                                                                                                                                                                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Édition                | Ajouter, supprimer, dupliquer et réordonner des diapositives ; choisir un arrière-plan ; zoomer dans l'éditeur ; appliquer des dispositions (titre, titre + contenu, vide…).                                                                                                                                                                   |
+| Contenu                | Insérer du texte, des images, des **vidéos**, des formes et des tableaux ; déplacer, redimensionner, mettre en forme ; copier/coller un élément ; annuler et rétablir (Undo/Redo). Une vidéo joue en boucle et sans son dans l'éditeur, avec le son pendant le diaporama ; elle est **recopiée dans un dossier `nom_media` à côté du projet**. |
+| Fichiers               | Enregistrer et ouvrir une présentation au format `.scraft` (XML lisible) ; exporter une copie en `.pptx` (textes, images, vidéos, formes, tableaux) ; **importer un fichier `.pptx`** (textes, images, vidéos, tableaux, fonds, notes).                                                                                                        |
+| Diaporama              | Projection plein écran, navigation au clavier, affichage des sous-titres en bas de l'écran.                                                                                                                                                                                                                                                    |
+| Transitions            | Effet d'entrée par diapositive (**None, Fade, Push, Wipe**), réellement joué pendant le diaporama ; « Apply to All » pour toutes les diapositives ; enregistré dans le `.scraft` et exporté en `.pptx`.                                                                                                                                        |
+| Onglets Review et View | Review : rapport SmartSlide, résumé de revue (nombre de mots, temps de lecture estimé, notes manquantes, historique des modifications avec Undo/Redo). View : zoom réel (100 %, +, −) et panneaux miniatures / propriétés / notes réellement masquables.                                                                                       |
+| SmartSlide             | Analyse automatique des diapositives (texte trop long, chevauchements, contraste…) avec des conseils.                                                                                                                                                                                                                                          |
+| Narration              | Synthèse vocale hors ligne via les voix Windows (`System.Speech`) : lecture d'un texte de narration écrit par l'utilisateur. La voix se choisit dans **Slide Show → Narration Voice**, avec sa langue et une phrase d'essai.                                                                                                                   |
+| Aide                   | Onglet **Help → Quick Guide** : un guide court en anglais simple qui explique à quoi sert chaque onglet, chaque fonction et chaque raccourci.                                                                                                                                                                                                  |
+| Quiz et jeu            | Création de questions à choix multiples par diapositive, mode « jeu » avec joueurs et votes **sur le PC du présentateur**, résultats calculés localement.                                                                                                                                                                                      |
+| Sous-titres            | Deux langues saisies à la main (pas de traduction automatique), affichées pendant la projection.                                                                                                                                                                                                                                               |
+| Notes                  | Notes personnelles, conseil du coach, texte de narration et durée cible par diapositive.                                                                                                                                                                                                                                                       |
+| Export texte           | Après chaque export `.pptx`, un fichier `nom-notes.txt` est écrit à côté : notes, conseil, narration et sous-titres de toutes les diapositives.                                                                                                                                                                                                |
 
 L'interface est **entièrement en anglais** ; les commentaires du code et cette
 documentation sont en français.
@@ -263,15 +265,15 @@ fichier texte.
 
 ## Raccourcis clavier
 
-| Raccourci | Action |
-|---|---|
-| `Ctrl + N` | Nouvelle présentation |
-| `Ctrl + O` | Ouvrir un `.scraft` |
-| `Ctrl + S` | Enregistrer |
-| `Ctrl + Z` / `Ctrl + Y` | Annuler / Rétablir |
-| `Suppr` | Supprimer l'élément sélectionné |
-| `F5` | Démarrer le diaporama |
-| `Échap` | Quitter le diaporama |
+| Raccourci               | Action                          |
+| ----------------------- | ------------------------------- |
+| `Ctrl + N`              | Nouvelle présentation           |
+| `Ctrl + O`              | Ouvrir un `.scraft`             |
+| `Ctrl + S`              | Enregistrer                     |
+| `Ctrl + Z` / `Ctrl + Y` | Annuler / Rétablir              |
+| `Suppr`                 | Supprimer l'élément sélectionné |
+| `F5`                    | Démarrer le diaporama           |
+| `Échap`                 | Quitter le diaporama            |
 
 ---
 
@@ -299,3 +301,12 @@ fichier texte.
   le SDK Open XML, mais l'ouverture réelle dans PowerPoint reste à tester.
 - Le choix de la voix de narration est enregistré par machine, pas dans la
   présentation : un nom de voix n'existe que sur l'ordinateur qui l'a installée.
+
+## Version
+
+Version actuelle : 1.0.0
+
+Statut : En développement.
+
+Cette version inclut les fonctionnalités principales de SlideCraft
+ainsi que le système d'analyse de qualité SmartSlide.
