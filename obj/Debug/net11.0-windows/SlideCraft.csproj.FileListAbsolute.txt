@@ -44,3 +44,4 @@ C:\Users\USER\Downloads\SlideCraft-source (7)\slidecraft\obj\Debug\net11.0-windo
 C:\Users\USER\Downloads\SlideCraft-source (7)\slidecraft\obj\Debug\net11.0-windows\SlideCraft.pdb
 C:\Users\USER\Downloads\SlideCraft-source (7)\slidecraft\obj\Debug\net11.0-windows\SlideCraft.genruntimeconfig.cache
 C:\Users\USER\Downloads\SlideCraft-source (7)\slidecraft\obj\Debug\net11.0-windows\ref\SlideCraft.dll
+C:\Users\USER\Downloads\SlideCraft-source (7)\SlideCraft\obj\Debug\net11.0-windows\SlideCraft.sourcelink.json
