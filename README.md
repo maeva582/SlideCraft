@@ -301,3 +301,12 @@ fichier texte.
   le SDK Open XML, mais l'ouverture réelle dans PowerPoint reste à tester.
 - Le choix de la voix de narration est enregistré par machine, pas dans la
   présentation : un nom de voix n'existe que sur l'ordinateur qui l'a installée.
+
+## Version
+
+Version actuelle : 1.0.0
+
+Statut : En développement.
+
+Cette version inclut les fonctionnalités principales de SlideCraft
+ainsi que le système d'analyse de qualité SmartSlide.
